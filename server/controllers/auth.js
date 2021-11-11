@@ -1,6 +1,7 @@
-const pool = require('../db_pool');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const pool = require('../db_pool');
+const producer = require('../kafka/producer')
 
 const createToken = (id) => {
   return jwt.sign(id, process.env.SECRET);
@@ -44,32 +45,10 @@ module.exports.signup = async (req, res) => {
     const token = createToken({ public_id: signup.rows[0].public_id, username, role });
     res.status(200).json({ token, public_id: signup.rows[0].public_id, username, role });
 
-  } catch (err) {
-    console.log(err);
-  }
-};
-
-module.exports.verify = async (req, res) => {
-  try {
-    const token = req.header('authorization').split("Bearer ")[1]
-
-    if (token) {
-      jwt.verify(token, process.env.SECRET, async (err, decodedToken) => {
-        if (err) {
-          res.json({ validToken: false });
-        } else {
-          const username = await pool.query(
-              'SELECT username FROM users WHERE public_id =$1',
-              [decodedToken.public_id]);
-
-          if (username) {
-            res.json({ validToken: true });
-          }
-        }
-      })
-    } else {
-      res.json({ validToken: false }) 
-    }
+    await producer.send({
+      topic: 'accounts-stream',
+      messages: [{  key: 'AccountRegistered', value: JSON.stringify({ public_id: signup.rows[0].public_id, role, username }) }],
+    })
 
   } catch (err) {
     console.log(err);
