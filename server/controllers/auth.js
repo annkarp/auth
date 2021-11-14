@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const pool = require('../db_pool');
-const producer = require('../kafka/producer')
+const sendToKafka = require('../kafka/producer')
 
 const createToken = (id) => {
   return jwt.sign(id, process.env.SECRET);
@@ -45,10 +45,8 @@ module.exports.signup = async (req, res) => {
     const token = createToken({ public_id: signup.rows[0].public_id, username, role });
     res.status(200).json({ token, public_id: signup.rows[0].public_id, username, role });
 
-    await producer.send({
-      topic: 'accounts-stream',
-      messages: [{  key: 'AccountRegistered', value: JSON.stringify({ public_id: signup.rows[0].public_id, role, username }) }],
-    })
+    const message = { public_id: signup.rows[0].public_id, username, email, role };
+    sendToKafka(message, 'AccountCreated')
 
   } catch (err) {
     console.log(err);
